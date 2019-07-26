@@ -52,10 +52,10 @@ class CPU:
         #Compare the values in two registers.
         CMP = 0b10100111
        
-        # `FL` bits: `00000LGE`
-        # Equal = E 1 otherwise 0
-        # A < B = L 1 otherwise 0
-        # A > B = G 1 otherwise 0
+        # `FL` bits: `00000LGE`              |LGE   
+        # Equal = E 1 otherwise 0 (0000|001)
+        # A < B = L 1 otherwise 0 (00000|100)
+        # A > B = G 1 otherwise 0 (00000|010)
         if op == CMP:
             if self.register[reg_a] == self.register[reg_b]:
                 self.FL = 0b00000001
