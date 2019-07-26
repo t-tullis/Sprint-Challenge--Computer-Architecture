@@ -11,6 +11,8 @@ class CPU:
         self.register = [0] * 8
         #Program Counter
         self.pc = 0
+        #Comp flag
+        self.FL = None
         self.register[7] = 0xF4
 
     
@@ -47,10 +49,21 @@ class CPU:
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
-
-        if op == "ADD":
-            self.register[reg_a] += self.register[reg_b]
-        #elif op == "SUB": etc
+        #Compare the values in two registers.
+        CMP = 0b10100111
+       
+        # `FL` bits: `00000LGE`
+        # Equal = E 1 otherwise 0
+        # A < B = L 1 otherwise 0
+        # A > B = G 1 otherwise 0
+        if op == CMP:
+            if self.register[reg_a] == self.register[reg_b]:
+                self.FL = 0b00000001
+            elif self.register[reg_a] > self.register[reg_b]:
+                self.FL = 0b00000010
+            elif self.register[reg_a] < self.register[reg_b]:
+                self.FL = 0b00000100
+     
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -62,8 +75,6 @@ class CPU:
 
         print(f"TRACE: %02X | %02X %02X %02X |" % (
             self.pc,
-            #self.fl,
-            #self.ie,
             self.ram_read(self.pc),
             self.ram_read(self.pc + 1),
             self.ram_read(self.pc + 2)
@@ -79,28 +90,18 @@ class CPU:
         running = True 
 
         #Instructions
-        
         #Halt the CPU (and exit the emulator).
         HLT = 0b00000001
         #Set the value of a register to an integer.
         LDI = 0b10000010
         #Print to the console the decimal integer value that is stored in the given register.
         PRN = 0b01000111
-        #Multiply the values in two registers together and store the result in registerA.
-        MUL = 0b10100010
-        #Push the value in the given register on the stack.
-        PUSH = 0b01000101
-        #Pop the value at the top of the stack into the given register.
-        POP = 0b01000110
-        #Calls a subroutine (function) at the address stored in the register.
-        CALL = 0b01010000
-        #Pop the value from the top of the stack and store it in the `PC`.
-        RET = 0b00010001
         #Compare the values in two registers.
-        CMP = 0b10100111
-        #Stack Pointer Register
-        SP = self.register[7]
-
+        JEQ = 0b01010101
+        #If E flag is clear (false, 0), jump to the address stored in the given register.
+        JNE = 0b01010110
+        #Jump to the address stored in the given register.
+        JMP = 0b01010100
 
         while running:
 
@@ -111,9 +112,15 @@ class CPU:
             operand_a = self.ram_read(self.pc + 1)
             #Argument2
             operand_b = self.ram_read(self.pc + 2)
+            
+            #checks for Instruction and if AA->B<-CDDDD is a 1 and then shifts over 5bits and performs algorithmic or logical operation
+            alu_number = (IR & 0b00100000) >> 5
 
-            #If Insturction Register == HLT exit the emulator, turning true to false and move to next instruction
-            if IR == HLT:
+            if alu_number == 1:
+                self.alu(IR, operand_a, operand_b)
+                self.pc += 3
+            
+            elif IR == HLT:
                 running = False
                 self.pc += 1
 
@@ -121,70 +128,32 @@ class CPU:
             elif IR == LDI:
                 self.register[operand_a] = operand_b
                 self.pc += 3
-
-            #Else if Instruction Register == MUL in register[operand_a(8)]. 
-            #multiply self.register[operand_a(8)] * self.register[operand_b(9)] == 72
-            elif IR == MUL:
-                self.register[operand_a] = self.register[operand_a] * self.register[operand_b]
-                self.pc += 3
     
             #Else if Instruction Register == PRN print to the console the decimal integer value of  register[operand_a]
             elif IR == PRN:
                 print(self.register[operand_a])
                 self.pc += 2
-            
-            elif IR == PUSH:
-                #decrement SP
-                SP -= 1
-                #get the register number operand
-                register_num = self.ram[self.pc + 1]
-                #get the value from that register
-                value = self.register[register_num]
-               #store that value in memory at the SP
-                self.ram[SP] = value
-                self.pc += 2
-            
-            elif IR == POP:
-                #get the value from memory 
-                value = self.ram[SP]
-                #get the register number operand
-                register_num = self.ram[self.pc + 1]
-                #store the value from the stack in the register
-                self.register[register_num] = value
-                #increment SP
-                SP += 1
-                self.pc += 2
-
-            elif IR == CALL:
-                return_address = self.pc + 2
                 
-                SP -= 1
-                self.ram[SP] = return_address
+            elif IR == JMP:
+                #jump to the address stored in the given register.
+                self.pc = self.register[operand_a]
 
-                register_num = self.ram[self.pc + 1]
-                subroutine_address = self.register[register_num]
-                
-                self.pc = subroutine_address
-            
-            elif IR == RET:
-                return_address = self.ram[SP]
-                SP += 1
+            elif IR == JEQ:
+                #checks to see if FLAG is  == 1
+                if self.FL == 0b00000001:
+                    #then jumps to the address stored in the given register.
+                    self.pc = self.register[operand_a]
+                else:
+                    self.pc += 2
 
-                self.pc = return_address
+            #checks to see if FLAG is  != 1
+            elif IR == JNE:
+                #then jumps to the address stored in the given register.
+                if self.FL != 0b00000001 :
+                    self.pc = self.register[operand_a]
+                else:
+                    self.pc += 2
 
-            elif IR == CMP:
-                E = 0
-                L = 0
-                G = 0
-
-                if self.register[operand_a] == self.register[operand_b]:
-                    E = 1
-                elif self.register[operand_a] < self.register[operand_b]:
-                    L = 1
-                elif self.register[operand_a] > self.register[operand_b]:
-                    G = 1
-
-            
             
             else:
                 print(f"Command {IR} Not Found")
